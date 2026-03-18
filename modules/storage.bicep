@@ -34,4 +34,4 @@ resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-0
 
 // Outputs para usar después
 output storageAccountName string = storageAccount.name
-output fileSharePath string = '\\\\${storageAccount.name}.file.core.windows.net\\${fileShareName}'
+output fileSharePath string = '\\\\${storageAccount.name}.file.${environment().suffixes.storage}\\${fileShareName}'

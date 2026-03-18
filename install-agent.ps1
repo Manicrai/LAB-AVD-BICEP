@@ -1,54 +1,40 @@
-param(
-    [string]$Token
-)
-
-# 1. Configuración de seguridad
+if ([string]::IsNullOrWhiteSpace($Token)) { throw "Missing Token" }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$p = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*")
+Get-ItemProperty $p -EA Ignore | ?{ $_.DisplayName -match "Virtual Desktop Agent" -or $_.DisplayName -match "Remote Desktop Services Infrastructure" } | %{
+    $u=$_.UninstallString -replace 'msiexec.exe /I','' -replace 'msiexec.exe /i',''
+    if ($u) { Start-Process "msiexec.exe" -ArgumentList "/x $u /qn /norestart" -Wait -NoNewWindow }
+}
+Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\RDInfraAgent" -Recurse -Force -EA Ignore
+Start-Sleep -s 5
 
-# 2. Enlaces Directos (FWLinks) - Más estables que los anteriores
 $urls = @{
-    "Agent"      = "https://go.microsoft.com/fwlink/?linkid=2084815"
-    "Bootloader" = "https://go.microsoft.com/fwlink/?linkid=2084820"
+    "A" = "https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RWrmXv"
+    "B" = "https://query.prod.cms.rt.microsoft.com/cms/api/am/binary/RWrxrH"
 }
-
-# Función de descarga con reintentos
-function Download-WithRetry {
-    param ($Url, $Output)
-    $maxRetries = 3
-    $retryCount = 0
-    $downloaded = $false
-
-    while (-not $downloaded -and $retryCount -lt $maxRetries) {
-        try {
-            $retryCount++
-            Write-Host "Intento $retryCount de $maxRetries para: $Output"
-            # Usamos UserAgent para simular ser un navegador Edge
-            Invoke-WebRequest -Uri $Url -OutFile $Output -UseBasicParsing -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59"
-            $downloaded = $true
-            Write-Host "¡Descarga exitosa!" -ForegroundColor Green
-        }
-        catch {
-            Write-Host "Fallo en intento $retryCount. Error: $_" -ForegroundColor Yellow
-            Start-Sleep -Seconds 5 # Esperar 5 segundos antes de reintentar
-        }
-    }
-    
-    if (-not $downloaded) {
-        Write-Host "ERROR CRÍTICO: No se pudo descargar el archivo tras $maxRetries intentos." -ForegroundColor Red
-        Exit 1
+function DL($u, $o) {
+    for ($i=1; $i -le 3; $i++) {
+        try { Invoke-WebRequest -Uri $u -OutFile $o -UseBasicParsing; return } catch { Start-Sleep -s 5 }
     }
 }
+DL $urls["A"] "C:\Windows\Temp\a.msi"
+DL $urls["B"] "C:\Windows\Temp\b.msi"
 
-# 3. Ejecutar descargas
-Download-WithRetry -Url $urls["Agent"] -Output "C:\Windows\Temp\agent.msi"
-Download-WithRetry -Url $urls["Bootloader"] -Output "C:\Windows\Temp\bootloader.msi"
+function Inst($m, $a) {
+    for ($i=1; $i -le 10; $i++) {
+        $proc = Start-Process msiexec.exe -ArgumentList "/i `"$m`" $a" -Wait -PassThru
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { return }
+        Start-Sleep -s 10
+    }
+}
+Inst "C:\Windows\Temp\a.msi" "/qn /norestart REGISTRATIONTOKEN=$Token"
+Inst "C:\Windows\Temp\b.msi" "/qn /norestart"
 
-# 4. Instalación
-Write-Host "Instalando Agente..."
-$agentArgs = "/i C:\Windows\Temp\agent.msi /quiet RDInfraAgentRegistrationToken=$Token"
-Start-Process -FilePath "msiexec.exe" -ArgumentList $agentArgs -Wait
+$r="HKLM:\SOFTWARE\FSLogix\Profiles"
+if (-not (Test-Path $r)) { New-Item -Path $r -Force | Out-Null }
+Set-ItemProperty $r "Enabled" -Type DWord -Value 1
+Set-ItemProperty $r "VHDLocations" -Type String -Value $FileSharePath
 
-Write-Host "Instalando Bootloader..."
-Start-Process -FilePath "msiexec.exe" -ArgumentList "/i C:\Windows\Temp\bootloader.msi /quiet" -Wait
-
-Write-Host "¡Proceso finalizado correctamente!" -ForegroundColor Cyan
+$k="HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters"
+if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }
+Set-ItemProperty $k "CloudKerberosTicketRetrievalEnabled" -Type DWord -Value 1
