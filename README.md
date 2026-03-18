@@ -1,47 +1,33 @@
-# Zero-Touch Azure Virtual Desktop (AVD) Deployment with Bicep
+# Azure Virtual Desktop (AVD) Infrastructure as Code Lab
 
-Este repositorio contiene una infraestructura completa de **Azure Virtual Desktop (AVD)** diseñada para desplegarse mediante código (Infrastucture as Code - IaC) de principio a fin, utilizando la tecnología nativa de **Azure Bicep** combinada con envolturas de orquestación en **PowerShell**.
+This repository contains a modular **Infrastructure as Code (IaC)** deployment for an Azure Virtual Desktop environment using **Bicep**. The project is designed as a laboratory to practice automated deployments of scalable virtual desktop infrastructures on Microsoft Azure.
 
-Este es un entorno de laboratorio (`lab`) optimizado para reducción de costos, agilidad y configuración automática para identidades puramente basadas en la nube (**Microsoft Entra ID / Azure AD**), erradicando por completo la necesidad de un Controlador de Dominio clásico on-premises.
+## 🏗️ Architecture Overview
 
-## Características Técnicas Principales
-- 🚀 **Despliegue Cero-Toques**: Un solo script PowerShell (`deploy.ps1`) se encarga del inicio de sesión, creación del grupo de recursos, orquestación Bicep e inyección segura de tokens.
-- ☁️ **Native Microsoft Entra ID Join**: La máquina (Session Host) se une automáticamente a Entra ID utilizando la extensión `AADLoginForWindows` y *SystemAssigned Managed Identities*. No requiere Controladores de Dominio.
-- 💾 **FSLogix Preconfigurado**: Integración directa con Azure Files a través del protocolo SMB y autenticación Entra Kerberos para contenedores de perfiles de usuario dinámicos. Reducción a 0% de tiempos muertos en inicio de sesión.
-- ⚡ **Agente AVD "Bulletproof"**: Script minimizado y optimizado que limpia registros residuales y utiliza inyección directa por Base64 vía `CustomScriptExtension` (evitando límites de comandos nativos de Windows). Descarga el instalador directo del AVD Broker desde CDNs crudas para evadir falsos positivos de bloqueo.
-- 💰 **Control Rígido de Costos**: Adopta máquinas serie `B2s` bajo un disco de estado sólido Standard, e integra la programación nativa de DevTestLabs (`Microsoft.DevTestLab/schedules`) para el **apagado automático diario**.
+The project follows a modular approach to ensure reusability and clean code practices. It orchestrates the deployment of the core components required for a functional AVD host pool.
 
-## Estructura del Código
+### Core Modules:
+* **`main.bicep`**: The primary orchestrator that manages parameters, variables, and module dependencies.
+* **`modules/network.bicep`**: Deploys the Virtual Network (VNet) and a dedicated Subnet for the Session Hosts.
+* **`modules/storage.bicep`**: Configures a Storage Account and an Azure File Share specifically for **FSLogix** profile management, including a 5GB quota to optimize costs during the lab phase.
 
-```text
-📦 LAB-AVD-BICEP
- ┣ 📂 modules
- ┃ ┣ 📜 network.bicep          # Redes Virtuales (VNET, Subnets)
- ┃ ┣ 📜 avd-backplane.bicep    # Broker AVD (Host Pools, App Groups, Workspaces)
- ┃ ┣ 📜 storage.bicep          # Azure Files para montar Perfiles FSLogix
- ┃ ┗ 📜 vm.bicep               # El Session Host, Identidades y Extensiones
- ┣ 📜 main.bicep               # Orquestador Principal Bicep
- ┣ 📜 deploy.ps1               # Entorno de inicio y disparador
- ┗ 📜 install-agent.ps1        # Receta infalible empaquetada en Base64 a la VM
-```
+## 🚀 Key Features
 
-## Requisitos Previos (Prerequisites)
-1. **Azure CLI** instalado (`az login` será forzado en el script corto).
-2. Permisos de **Propietario (Owner)** en la suscripción de Azure meta para aplicar correctamente el acceso de Roles RBAC en Múltiples Ambientes.
-3. Un entorno Windows local (preferible PowerShell 7.x).
+* **Modular Design**: Separation of concerns between networking and storage.
+* **Cost Optimization**: Implemented storage quotas to prevent unexpected billing.
+* **Automated Deployment**: Ready to be deployed via Azure CLI or PowerShell.
+* **Best Practices**: Use of parameters and outputs to maintain a dynamic and flexible infrastructure.
 
-## Instalación y Despliegue
+## 🛠️ Getting Started
 
-Simplemente, desde un terminal elevado, lanza:
-```powershell
-.\deploy.ps1 -AdminPassword "TuContraseñaSúperSegura123!"
-```
+### Prerequisites
+* An active **Azure Subscription**.
+* **Azure CLI** installed or access to **Azure Cloud Shell**.
+* **Bicep CLI** installed.
 
-El script tomará todo el paquete, inyectará tu contraseña temporal, validará que tu PC local se comunique con Entra ID de manera silenciosa y creará la infraestructura hasta montar por completo las granjas AVD bajo tu grupo de recursos `rg-avd-lab-01`.
+### Deployment Steps
 
-Tras 10-15 minutos aproximadamente y de reportar éxito, los recursos aparecerán como *Available* en el Panel AVD. 
-
-> [!WARNING]
-> La primera vez que el host se añade al Host Pool puede mostrar un falso rojo de alerta bajo el rubro `DomainJoinedCheck`. Esto es deliberado porque el host corre netamente en nube `Entra ID`, por lo cual, siempre y cuando arroje que `AADJoinedHealthCheck` esté exitoso (Verde), podrás ignorar la primera advertencia.
-> 
-> Es mandatorio asignar **permisos NTFS a nivel Directorio** dentro de tu Azure File Share por primera vez vía *icacls* antes de que FSLogix comience a escribir exitosamente perfiles montados para tus usuarios sin privilegios administrativos.
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/YOUR_USERNAME/Lab-AVD-Bicep.git](https://github.com/YOUR_USERNAME/Lab-AVD-Bicep.git)
+   cd Lab-AVD-Bicep
